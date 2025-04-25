@@ -40,6 +40,11 @@ public class User implements UserDetails {
     private LocalDateTime verificationCodeExpiresAt;
     private boolean enabled;
     private String bio;
+    @Column(name = "reset_code")
+    private String resetCode;
+
+    @Column(name = "reset_code_expiration")
+    private LocalDateTime resetCodeExpiresAt;
 
     private String profilePictureUrl;
     public User(String username, String email, String password) {

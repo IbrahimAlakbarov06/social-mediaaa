@@ -123,4 +123,81 @@ public class AuthenticationService {
         int code = random.nextInt(900000) + 100000;
         return String.valueOf(code);
     }
+    public void initiatePasswordReset(String email) {
+        Optional<User> optionalUser = userRepository.findByEmail(email);
+        if (optionalUser.isPresent()) {
+            User user = optionalUser.get();
+            user.setResetCode(generateVerificationCode());
+            user.setResetCodeExpiresAt(LocalDateTime.now().plusMinutes(15));
+            sendPasswordResetEmail(user);
+            userRepository.save(user);
+        } else {
+            throw new RuntimeException("User not found");
+        }
+    }
+
+    public void verifyResetCode(VerifyUserDto input) {
+        Optional<User> optionalUser = userRepository.findByEmail(input.getEmail());
+        if (optionalUser.isPresent()) {
+            User user = optionalUser.get();
+            if (user.getResetCodeExpiresAt() == null ||
+                    user.getResetCodeExpiresAt().isBefore(LocalDateTime.now())) {
+                throw new RuntimeException("Reset code has expired");
+            }
+            if (user.getResetCode() == null ||
+                    !user.getResetCode().equals(input.getVerificationCode())) {
+                throw new RuntimeException("Invalid reset code");
+            }
+            // Code is valid - we'll keep it valid until the password is reset
+        } else {
+            throw new RuntimeException("User not found");
+        }
+    }
+
+    public void resetPassword(String email, String resetCode, String newPassword) {
+        Optional<User> optionalUser = userRepository.findByEmail(email);
+        if (optionalUser.isPresent()) {
+            User user = optionalUser.get();
+            if (user.getResetCodeExpiresAt() == null ||
+                    user.getResetCodeExpiresAt().isBefore(LocalDateTime.now())) {
+                throw new RuntimeException("Reset code has expired");
+            }
+            if (user.getResetCode() == null ||
+                    !user.getResetCode().equals(resetCode)) {
+                throw new RuntimeException("Invalid reset code");
+            }
+
+            // Reset the password
+            user.setPassword(passwordEncoder.encode(newPassword));
+            user.setResetCode(null);
+            user.setResetCodeExpiresAt(null);
+            userRepository.save(user);
+        } else {
+            throw new RuntimeException("User not found");
+        }
+    }
+
+    private void sendPasswordResetEmail(User user) {
+        String subject = "Password Reset Request";
+        String resetCode = "PASSWORD RESET CODE: " + user.getResetCode();
+        String htmlMessage = "<html>"
+                + "<body style=\"font-family: Arial, sans-serif;\">"
+                + "<div style=\"background-color: #f5f5f5; padding: 20px;\">"
+                + "<h2 style=\"color: #333;\">Password Reset Request</h2>"
+                + "<p style=\"font-size: 16px;\">Please enter the code below to reset your password:</p>"
+                + "<div style=\"background-color: #fff; padding: 20px; border-radius: 5px; box-shadow: 0 0 10px rgba(0,0,0,0.1);\">"
+                + "<h3 style=\"color: #333;\">Reset Code:</h3>"
+                + "<p style=\"font-size: 18px; font-weight: bold; color: #007bff;\">" + resetCode + "</p>"
+                + "</div>"
+                + "<p style=\"font-size: 14px; color: #666; margin-top: 20px;\">If you did not request a password reset, please ignore this email.</p>"
+                + "</div>"
+                + "</body>"
+                + "</html>";
+
+        try {
+            emailService.sendVerificationEmail(user.getEmail(), subject, htmlMessage);
+        } catch (MessagingException e) {
+            e.printStackTrace();
+        }
+    }
 }
